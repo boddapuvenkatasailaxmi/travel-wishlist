@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import RouteMap from '../components/RouteMap';
 
 const CONTINENT_COLORS = {
   Asia:     { badge: '#FF9800', emoji: '🌏' },
@@ -15,15 +16,11 @@ const imageCache = {};
 async function fetchImage(destinationName) {
   const city = destinationName.split(',')[0].trim();
   if (imageCache[city]) return imageCache[city];
-
   try {
-    // Step 1: Search Wikipedia for the city
     const searchRes = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`
     );
     const searchData = await searchRes.json();
-
-    // Step 2: Get the thumbnail image from Wikipedia
     if (searchData.thumbnail && searchData.thumbnail.source) {
       const url = searchData.thumbnail.source;
       imageCache[city] = url;
@@ -32,11 +29,9 @@ async function fetchImage(destinationName) {
   } catch (e) {
     console.log('Wikipedia error:', e);
   }
-
-  // Fallback to Pexels if Wikipedia has no image
   try {
     const res = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(city + ' travel')}&per_page=5`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(city + ' travel tourism')}&per_page=5&orientation=landscape`,
       { headers: { Authorization: import.meta.env.VITE_PEXELS_KEY } }
     );
     const data = await res.json();
@@ -48,12 +43,12 @@ async function fetchImage(destinationName) {
   } catch (e) {
     console.log('Pexels error:', e);
   }
-
   return `https://picsum.photos/seed/${encodeURIComponent(city)}/400/300`;
 }
 
 function DestinationCard({ dest, onToggle, onDelete }) {
   const [image, setImage] = useState('');
+  const [showMap, setShowMap] = useState(false);
   const colors = CONTINENT_COLORS[dest.continent] || CONTINENT_COLORS['Asia'];
 
   useEffect(() => {
@@ -61,61 +56,85 @@ function DestinationCard({ dest, onToggle, onDelete }) {
   }, [dest.name]);
 
   return (
-    <div style={{
-      background: 'white', borderRadius: 20,
-      overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-      opacity: dest.visited ? 0.85 : 1,
-    }}>
-      <div style={{ position: 'relative', height: 160, background: '#f0f0f0' }}>
-        {image ? (
-          <img src={image} alt={dest.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
+    <>
+      <div style={{
+        background: 'white',
+        borderRadius: 20,
+        overflow: 'hidden',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+        opacity: dest.visited ? 0.85 : 1,
+      }}>
+        {/* Image */}
+        <div style={{ position: 'relative', height: 160, background: '#f0f0f0' }}>
+          {image ? (
+            <img src={image} alt={dest.name}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 40
+            }}>{colors.emoji}</div>
+          )}
+          {dest.visited && (
+            <div style={{
+              position: 'absolute', top: 10, right: 10,
+              background: '#4CAF50', color: 'white',
+              borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 600
+            }}>✓ Visited</div>
+          )}
           <div style={{
-            width: '100%', height: '100%', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', fontSize: 40
-          }}>{colors.emoji}</div>
-        )}
-        {dest.visited && (
-          <div style={{
-            position: 'absolute', top: 10, right: 10,
-            background: '#4CAF50', color: 'white',
+            position: 'absolute', top: 10, left: 10,
+            background: colors.badge, color: 'white',
             borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 600
-          }}>✓ Visited</div>
-        )}
-        <div style={{
-          position: 'absolute', top: 10, left: 10,
-          background: colors.badge, color: 'white',
-          borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 600
-        }}>{colors.emoji} {dest.continent}</div>
-      </div>
-      <div style={{ padding: '1rem' }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#333' }}>{dest.name}</h3>
-        {dest.budget > 0 && (
-          <p style={{ margin: '0 0 6px', fontSize: 13, color: '#667eea', fontWeight: 600 }}>
-            💰 ₹{Number(dest.budget).toLocaleString('en-IN')}
-          </p>
-        )}
-        {dest.note && (
-          <p style={{ margin: '0 0 12px', fontSize: 12, color: '#888', lineHeight: 1.4 }}>
-            📝 {dest.note}
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => onToggle(dest)} style={{
-            flex: 1, padding: '8px', borderRadius: 10, border: 'none',
+          }}>{colors.emoji} {dest.continent}</div>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '1rem' }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 16, color: '#333' }}>{dest.name}</h3>
+          {dest.budget > 0 && (
+            <p style={{ margin: '0 0 6px', fontSize: 13, color: '#667eea', fontWeight: 600 }}>
+              💰 ₹{Number(dest.budget).toLocaleString('en-IN')}
+            </p>
+          )}
+          {dest.note && (
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#888', lineHeight: 1.4 }}>
+              📝 {dest.note}
+            </p>
+          )}
+
+          {/* View Route Button */}
+          <button onClick={() => setShowMap(true)} style={{
+            width: '100%', padding: '8px', borderRadius: 10, border: 'none',
             cursor: 'pointer', fontSize: 12, fontWeight: 600,
-            background: dest.visited ? '#FFF3E0' : '#E8F5E9',
-            color: dest.visited ? '#FF9800' : '#4CAF50'
-          }}>{dest.visited ? '↩ Unmark' : '✓ Mark Visited'}</button>
-          <button onClick={() => onDelete(dest._id)} style={{
-            padding: '8px 12px', borderRadius: 10, border: 'none',
-            cursor: 'pointer', fontSize: 12,
-            background: '#FFEBEE', color: '#F44336', fontWeight: 600
-          }}>🗑</button>
+            background: '#E3F2FD', color: '#2196F3', marginBottom: 8
+          }}>🗺️ View Route to {dest.name.split(',')[0]}</button>
+
+          {/* Mark Visited and Delete */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => onToggle(dest)} style={{
+              flex: 1, padding: '8px', borderRadius: 10, border: 'none',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              background: dest.visited ? '#FFF3E0' : '#E8F5E9',
+              color: dest.visited ? '#FF9800' : '#4CAF50'
+            }}>{dest.visited ? '↩ Unmark' : '✓ Mark Visited'}</button>
+            <button onClick={() => onDelete(dest._id)} style={{
+              padding: '8px 12px', borderRadius: 10, border: 'none',
+              cursor: 'pointer', fontSize: 12,
+              background: '#FFEBEE', color: '#F44336', fontWeight: 600
+            }}>🗑</button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Route Map Popup */}
+      {showMap && (
+        <RouteMap
+          destination={dest}
+          onClose={() => setShowMap(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -160,6 +179,7 @@ export default function Wishlist() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
 
+      {/* Header */}
       <div style={{
         background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)',
         padding: '1rem 2rem', display: 'flex',
@@ -184,6 +204,7 @@ export default function Wishlist() {
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1rem' }}>
 
+        {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
           {[
             { label: 'Total', value: destinations.length, emoji: '🗺️', color: '#667eea' },
@@ -201,13 +222,15 @@ export default function Wishlist() {
           ))}
         </div>
 
+        {/* Add Form */}
         <div style={{
           background: 'white', borderRadius: 20, padding: '1.5rem',
           marginBottom: 24, boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
         }}>
           <h3 style={{ margin: '0 0 1rem', color: '#333' }}>➕ Add New Destination</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <input placeholder="🌍 Any destination (e.g. Ooty, Manali, Paris...)"
+            <input
+              placeholder="🌍 Any destination (e.g. Ooty, Manali, Paris...)"
               value={form.name}
               onChange={e => setForm({...form, name: e.target.value})}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
@@ -218,13 +241,15 @@ export default function Wishlist() {
               style={{ padding: '10px 14px', borderRadius: 10, border: '2px solid #eee', fontSize: 14, outline: 'none', background: 'white' }}>
               {Object.keys(CONTINENT_COLORS).map(c => <option key={c}>{c}</option>)}
             </select>
-            <input placeholder="💰 Budget (₹)" type="number" value={form.budget}
+            <input
+              placeholder="💰 Budget (₹)" type="number" value={form.budget}
               onChange={e => setForm({...form, budget: e.target.value})}
               style={{ padding: '10px 14px', borderRadius: 10, border: '2px solid #eee', fontSize: 14, outline: 'none' }}
             />
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <input placeholder="📝 Add a note..."
+            <input
+              placeholder="📝 Add a note..."
               value={form.note}
               onChange={e => setForm({...form, note: e.target.value})}
               style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '2px solid #eee', fontSize: 14, outline: 'none' }}
@@ -237,6 +262,7 @@ export default function Wishlist() {
           </div>
         </div>
 
+        {/* Filter Buttons */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {['all', 'wishlist', 'visited'].map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
@@ -251,10 +277,15 @@ export default function Wishlist() {
           ))}
         </div>
 
+        {/* Destination Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {filtered.map(dest => (
-            <DestinationCard key={dest._id} dest={dest}
-              onToggle={toggleVisited} onDelete={handleDelete} />
+            <DestinationCard
+              key={dest._id}
+              dest={dest}
+              onToggle={toggleVisited}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
 
